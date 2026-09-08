@@ -1,0 +1,8 @@
+# Build artifacts
+/ratelimitd
+*.test
+*.out
+
+# Local tooling and editor files
+.DS_Store
+.env
