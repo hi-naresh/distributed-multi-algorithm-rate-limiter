@@ -120,6 +120,9 @@ func TestPoliciesAndValidation(t *testing.T) {
 	if _, err := limiter.Allow(context.Background(), "x", 2); !errors.Is(err, ErrInvalidCost) {
 		t.Fatalf("oversized cost error = %v", err)
 	}
+	if _, err := limiter.Allow(nil, "x", 1); !errors.Is(err, ErrInvalidContext) {
+		t.Fatalf("nil context error = %v", err)
+	}
 	result, err := limiter.Allow(context.Background(), "window", 1)
 	if err != nil || result.Algorithm != SlidingWindow {
 		t.Fatalf("per-key policy not selected: %+v %v", result, err)
@@ -232,7 +235,9 @@ func TestConfigurationEdgeCases(t *testing.T) {
 		{"zero token rate", Config{DefaultPolicy: Policy{Algorithm: TokenBucket, Rate: 0, Capacity: 1}}, ErrInvalidPolicy},
 		{"infinite token rate", Config{DefaultPolicy: Policy{Algorithm: TokenBucket, Rate: math.Inf(1), Capacity: 1}}, ErrInvalidPolicy},
 		{"zero token capacity", Config{DefaultPolicy: Policy{Algorithm: TokenBucket, Rate: 1, Capacity: 0}}, ErrInvalidPolicy},
+		{"unsafe token capacity", Config{DefaultPolicy: Policy{Algorithm: TokenBucket, Rate: 1, Capacity: maxScriptInteger + 1}}, ErrInvalidPolicy},
 		{"zero window limit", Config{DefaultPolicy: Policy{Algorithm: SlidingWindow, Limit: 0, Window: time.Second}}, ErrInvalidPolicy},
+		{"unsafe window limit", Config{DefaultPolicy: Policy{Algorithm: SlidingWindow, Limit: maxScriptInteger + 1, Window: time.Second}}, ErrInvalidPolicy},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

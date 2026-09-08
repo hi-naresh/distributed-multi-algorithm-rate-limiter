@@ -20,10 +20,15 @@ import (
 var (
 	ErrInvalidKey       = errors.New("ratelimiter: key must not be empty")
 	ErrInvalidCost      = errors.New("ratelimiter: cost must be greater than zero")
+	ErrInvalidContext   = errors.New("ratelimiter: context must not be nil")
 	ErrInvalidPolicy    = errors.New("ratelimiter: invalid policy")
 	ErrUnsupportedAlgo  = errors.New("ratelimiter: unsupported algorithm")
 	ErrRedisUnavailable = errors.New("ratelimiter: redis unavailable")
 )
+
+// Redis Lua 5.1 stores numbers as IEEE-754 doubles. Integers above 2^53-1
+// cannot be represented exactly and could make admission decisions incorrect.
+const maxScriptInteger int64 = 1<<53 - 1
 
 type Algorithm string
 
@@ -45,11 +50,12 @@ type Policy struct {
 func (p Policy) validate() error {
 	switch p.Algorithm {
 	case TokenBucket:
-		if p.Rate <= 0 || math.IsNaN(p.Rate) || math.IsInf(p.Rate, 0) || p.Capacity <= 0 {
+		if p.Rate <= 0 || math.IsNaN(p.Rate) || math.IsInf(p.Rate, 0) ||
+			p.Capacity <= 0 || p.Capacity > maxScriptInteger {
 			return fmt.Errorf("%w: token bucket requires positive finite rate and capacity", ErrInvalidPolicy)
 		}
 	case SlidingWindow:
-		if p.Limit <= 0 || p.Window < time.Millisecond {
+		if p.Limit <= 0 || p.Limit > maxScriptInteger || p.Window < time.Millisecond {
 			return fmt.Errorf("%w: sliding window requires positive limit and window of at least 1ms", ErrInvalidPolicy)
 		}
 	default:
@@ -159,6 +165,9 @@ func (l *Limiter) policy(key string) (Policy, error) {
 
 // Allow consumes cost units for key and returns the atomic decision.
 func (l *Limiter) Allow(ctx context.Context, key string, cost int64) (Result, error) {
+	if ctx == nil {
+		return Result{}, ErrInvalidContext
+	}
 	if strings.TrimSpace(key) == "" {
 		return Result{}, ErrInvalidKey
 	}

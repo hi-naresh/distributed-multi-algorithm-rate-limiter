@@ -34,6 +34,8 @@ if !decision.Allowed {
 the configured burst/window limit is rejected because it can never succeed.
 Policies are immutable after construction; use `PolicyResolver` when policy
 data is managed elsewhere. Resolver implementations must be concurrency-safe.
+Limits and capacities are capped at `2^53-1`, matching the exact integer range
+of the Redis Lua runtime used by the atomic scripts.
 
 ## Algorithms
 
