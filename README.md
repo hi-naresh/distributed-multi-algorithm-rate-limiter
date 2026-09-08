@@ -55,7 +55,9 @@ key names. Keys expire automatically after an inactivity-based TTL.
 
 The supplied clock is used to timestamp operations. Production deployments
 should use synchronized host clocks (or provide a clock backed by a trusted
-time source); Redis does not correct client timestamp skew. Redis Cluster,
+time source); Redis does not correct client timestamp skew. Sliding-window
+costs are represented as one sorted-set member per unit, so large costs should
+be avoided or bounded by the caller. Redis Cluster,
 Sentinel, or a managed Redis service can be used through `redis.UniversalClient`.
 Use a low-latency Redis topology and size connection pools for peak request
 concurrency. A Redis outage is returned as `ErrRedisUnavailable`; callers must

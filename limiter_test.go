@@ -3,6 +3,7 @@ package ratelimiter
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -198,6 +199,18 @@ func TestResolverValidation(t *testing.T) {
 	}
 }
 
+func TestResolverErrorsAreReturned(t *testing.T) {
+	clock := &testClock{t: time.Unix(650, 0)}
+	limiter, _, _ := newTestLimiter(t, Policy{Algorithm: TokenBucket, Rate: 1, Capacity: 1}, clock)
+	want := errors.New("policy backend unavailable")
+	limiter.resolve = func(string) (Policy, error) {
+		return Policy{}, want
+	}
+	if _, err := limiter.Allow(context.Background(), "x", 1); !errors.Is(err, want) {
+		t.Fatalf("resolver error = %v, want %v", err, want)
+	}
+}
+
 func TestConfigurationEdgeCases(t *testing.T) {
 	server, err := miniredis.Run()
 	if err != nil {
@@ -216,6 +229,10 @@ func TestConfigurationEdgeCases(t *testing.T) {
 		{"whitespace prefix", Config{Prefix: "bad prefix", DefaultPolicy: valid}, ErrInvalidPolicy},
 		{"sub-millisecond window", Config{DefaultPolicy: Policy{Algorithm: SlidingWindow, Limit: 1, Window: time.Microsecond}}, ErrInvalidPolicy},
 		{"empty policy key", Config{DefaultPolicy: valid, Policies: map[string]Policy{"": valid}}, ErrInvalidKey},
+		{"zero token rate", Config{DefaultPolicy: Policy{Algorithm: TokenBucket, Rate: 0, Capacity: 1}}, ErrInvalidPolicy},
+		{"infinite token rate", Config{DefaultPolicy: Policy{Algorithm: TokenBucket, Rate: math.Inf(1), Capacity: 1}}, ErrInvalidPolicy},
+		{"zero token capacity", Config{DefaultPolicy: Policy{Algorithm: TokenBucket, Rate: 1, Capacity: 0}}, ErrInvalidPolicy},
+		{"zero window limit", Config{DefaultPolicy: Policy{Algorithm: SlidingWindow, Limit: 0, Window: time.Second}}, ErrInvalidPolicy},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
