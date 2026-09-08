@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -32,12 +33,9 @@ func main() {
 	rdb := redis.NewClient(&redis.Options{Addr: redisAddr, Password: os.Getenv("REDIS_PASSWORD")})
 	defer rdb.Close()
 
-	policy := ratelimiter.Policy{
-		Algorithm: algorithm(env("RATE_LIMIT_ALGORITHM", string(ratelimiter.TokenBucket))),
-		Rate:      envFloat("RATE_LIMIT_RATE", 10),
-		Capacity:  envInt64("RATE_LIMIT_CAPACITY", 20),
-		Limit:     envInt64("RATE_LIMIT_LIMIT", 20),
-		Window:    time.Duration(envInt64("RATE_LIMIT_WINDOW_SECONDS", 60)) * time.Second,
+	policy, err := loadPolicy()
+	if err != nil {
+		log.Fatal(err)
 	}
 	limiter, err := ratelimiter.New(rdb, ratelimiter.Config{Prefix: env("REDIS_PREFIX", "ratelimiter"), DefaultPolicy: policy})
 	if err != nil {
@@ -103,20 +101,54 @@ func env(name, fallback string) string {
 	return fallback
 }
 
-func envInt64(name string, fallback int64) int64 {
-	value, err := strconv.ParseInt(env(name, strconv.FormatInt(fallback, 10)), 10, 64)
+func loadPolicy() (ratelimiter.Policy, error) {
+	rate, err := envFloat("RATE_LIMIT_RATE", 10)
 	if err != nil {
-		return fallback
+		return ratelimiter.Policy{}, err
 	}
-	return value
+	capacity, err := envInt64("RATE_LIMIT_CAPACITY", 20)
+	if err != nil {
+		return ratelimiter.Policy{}, err
+	}
+	limit, err := envInt64("RATE_LIMIT_LIMIT", 20)
+	if err != nil {
+		return ratelimiter.Policy{}, err
+	}
+	windowSeconds, err := envInt64("RATE_LIMIT_WINDOW_SECONDS", 60)
+	if err != nil {
+		return ratelimiter.Policy{}, err
+	}
+	return ratelimiter.Policy{
+		Algorithm: algorithm(env("RATE_LIMIT_ALGORITHM", string(ratelimiter.TokenBucket))),
+		Rate:      rate,
+		Capacity:  capacity,
+		Limit:     limit,
+		Window:    time.Duration(windowSeconds) * time.Second,
+	}, nil
 }
 
-func envFloat(name string, fallback float64) float64 {
-	value, err := strconv.ParseFloat(env(name, strconv.FormatFloat(fallback, 'f', -1, 64)), 64)
-	if err != nil {
-		return fallback
+func envInt64(name string, fallback int64) (int64, error) {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback, nil
 	}
-	return value
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", name, err)
+	}
+	return parsed, nil
+}
+
+func envFloat(name string, fallback float64) (float64, error) {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", name, err)
+	}
+	return parsed, nil
 }
 
 func algorithm(value string) ratelimiter.Algorithm {

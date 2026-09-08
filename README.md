@@ -78,7 +78,8 @@ GET /healthz
 Configuration is provided through `ADDR`, `REDIS_ADDR`, `REDIS_PASSWORD`,
 `REDIS_PREFIX`, `RATE_LIMIT_ALGORITHM`, `RATE_LIMIT_RATE`,
 `RATE_LIMIT_CAPACITY`, `RATE_LIMIT_LIMIT`, and
-`RATE_LIMIT_WINDOW_SECONDS`. Put TLS, authentication, and request-level
+`RATE_LIMIT_WINDOW_SECONDS`. Invalid numeric environment values fail startup
+instead of silently selecting a fallback. Put TLS, authentication, and request-level
 authorization at the service boundary or ingress.
 
 ## Testing
